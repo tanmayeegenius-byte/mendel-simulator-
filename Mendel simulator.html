@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mendel simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef3ec;--panel:#fbfdfa;--ink:#17301f;--mute:#5d7263;--line:#cbd8c9;--seed:#e3b505;--pod:#4f8a34;--exp:#b9cbb5;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0f1a13;--panel:#16251b;--ink:#e3eee0;--mute:#93a999;--line:#2b4033;--seed:#f0c419;--pod:#7fc15a;--exp:#3a5443}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0f1a13;--panel:#16251b;--ink:#e3eee0;--mute:#93a999;--line:#2b4033;--seed:#f0c419;--pod:#7fc15a;--exp:#3a5443}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:28px 18px 60px}
+h1{font:700 2.2rem/1.1 Fraunces,Georgia,serif;margin:0 0 6px}
+h2{font:500 1.25rem Fraunces,Georgia,serif;margin:0 0 12px}
+p.lead{color:var(--mute);margin:0 0 24px;max-width:60ch}
+section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+.row{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end}
+label{display:flex;flex-direction:column;font-size:.85rem;color:var(--mute);gap:4px}
+select,input[type=number]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 10px;min-width:120px}
+label.chk{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:1rem}
+button{font:600 1rem Inter,sans-serif;background:var(--pod);color:#fff;border:0;border-radius:6px;padding:9px 18px;cursor:pointer}
+button.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
+:focus-visible{outline:3px solid var(--seed);outline-offset:2px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;margin:0 auto}
+.punnett td,.punnett th{border:1px solid var(--line);padding:8px 10px;text-align:center;font-variant-numeric:tabular-nums;min-width:62px}
+.punnett th{background:var(--bg);font-weight:600;color:var(--mute)}
+.punnett td{font-family:Fraunces,Georgia,serif;font-size:1.05rem}
+.pheno{width:100%;font-size:.95rem}
+.pheno th{text-align:left;color:var(--mute);font-weight:400;padding:4px 8px;border-bottom:1px solid var(--line)}
+.pheno td{padding:8px;vertical-align:middle}
+.bar{display:flex;flex-direction:column;gap:3px;min-width:160px}
+.bar i{display:block;height:9px;border-radius:2px;min-width:2px}
+.bar .e{background:var(--exp)}.bar .o{background:var(--pod)}
+.note{color:var(--mute);font-size:.9rem;margin-top:10px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.legend{display:flex;gap:14px;font-size:.85rem;color:var(--mute);margin-top:8px}
+.legend i{display:inline-block;width:14px;height:8px;border-radius:2px;margin-right:5px}
+</style>
+</head>
+<body>
+<main>
+<h1>Mendel simulator</h1>
+<p class="lead">Cross two pea plants, see the Punnett square and expected ratios, then breed real offspring at random and compare.</p>
+
+<section>
+<h2>Parents</h2>
+<div class="row" id="setup">
+  <label>Parent 1: seed shape<select id="a0"></select></label>
+  <label>Parent 2: seed shape<select id="b0"></select></label>
+  <label class="chk"><input type="checkbox" id="di"> Add seed color (dihybrid)</label>
+</div>
+<div class="row" id="color" style="margin-top:12px;display:none">
+  <label>Parent 1: seed color<select id="a1"></select></label>
+  <label>Parent 2: seed color<select id="b1"></select></label>
+</div>
+<p class="note">Round (R) and yellow (Y) are dominant. Wrinkled (r) and green (y) show only when both alleles are recessive.</p>
+</section>
+
+<section>
+<h2>Punnett square</h2>
+<div class="scroll"><table class="punnett" id="sq"></table></div>
+</section>
+
+<section>
+<h2>Offspring</h2>
+<div class="row">
+  <label>Number of offspring<input type="number" id="n" value="100" min="1" max="100000"></label>
+  <button id="go">Breed offspring</button>
+  <button class="alt" id="clear">Clear results</button>
+</div>
+<div class="scroll" style="margin-top:14px"><table class="pheno" id="ph"></table></div>
+<div class="legend"><span><i style="background:var(--exp)"></i>Expected</span><span><i style="background:var(--pod)"></i>Observed</span></div>
+<p class="note" id="chi"></p>
+</section>
+</main>
+<script>
+const G=[{D:'R',r:'r',dom:'round',rec:'wrinkled'},{D:'Y',r:'y',dom:'yellow',rec:'green'}];
+const $=id=>document.getElementById(id);
+const geno=g=>[g.D+g.D,g.D+g.r,g.r+g.r];
+[0,1].forEach(i=>['a','b'].forEach(p=>{
+  $(p+i).innerHTML=geno(G[i]).map((x,k)=>`<option value="${x}"${k==1?' selected':''}>${x}</option>`).join('');
+  $(p+i).onchange=()=>{obs=null;render()};
+}));
+let obs=null;
+const ng=()=>$('di').checked?2:1;
+const parent=p=>[$(p+'0').value,$(p+'1').value];
+function gametes(p){
+  if(ng()==1)return [p[0][0],p[0][1]];
+  const out=[];for(const a of p[0])for(const b of p[1])out.push(a+b);return out;
+}
+function combine(x,y){
+  let s='';for(let i=0;i<ng();i++)s+=[x[i],y[i]].sort().join('');return s;
+}
+function pheno(g){
+  const n=ng(),o=[];
+  for(let i=0;i<n;i++)o.push(g.slice(2*i,2*i+2)[0]===G[i].D?G[i].dom:G[i].rec);
+  return o.join(', ');
+}
+function phenoKeys(){
+  const k=[];
+  if(ng()==1){k.push(G[0].dom,G[0].rec)}
+  else for(const a of [G[0].dom,G[0].rec])for(const b of [G[1].dom,G[1].rec])k.push(a+', '+b);
+  return k;
+}
+function color(k){return /yellow/.test(k)?'#e3b505':/green/.test(k)?'#5b9a3a':'#9aa79c'}
+function render(){
+  $('color').style.display=ng()==2?'flex':'none';
+  const g1=gametes(parent('a')),g2=gametes(parent('b'));
+  let h='<tr><th></th>'+g1.map(g=>`<th>${g}</th>`).join('')+'</tr>';
+  const exp={};phenoKeys().forEach(k=>exp[k]=0);
+  for(const b of g2){
+    h+=`<tr><th>${b}</th>`;
+    for(const a of g1){const c=combine(a,b);exp[pheno(c)]++;h+=`<td>${c}</td>`}
+    h+='</tr>';
+  }
+  $('sq').innerHTML=h;
+  const total=g1.length*g2.length,N=obs?obs.n:0;
+  const max=Math.max(...Object.values(exp).map(v=>v/total));
+  let t='<tr><th>Phenotype</th><th>Expected</th><th>Observed</th><th></th></tr>',chi=0,df=-1;
+  for(const k of phenoKeys()){
+    const f=exp[k]/total,e=f*N,o=obs?obs.c[k]:0;
+    if(f>0){df++;if(N)chi+=(o-e)**2/e}
+    t+=`<tr><td><span class="sw" style="background:${color(k)}"></span>${k}</td>
+    <td>${(f*100).toFixed(1)}%<br><small>${exp[k]}/${total}</small></td>
+    <td>${N?`${o} (${(o/N*100).toFixed(1)}%)`:'–'}</td>
+    <td class="bar"><i class="e" style="width:${f/(max||1)*100}%"></i>${N?`<i class="o" style="width:${o/N/(max||1)*100}%"></i>`:''}</td></tr>`;
+  }
+  $('ph').innerHTML=t;
+  const crit=[0,3.84,5.99,7.81][df]||null;
+  $('chi').textContent=N&&df>0&&crit
+    ?`Chi-square = ${chi.toFixed(2)} (df ${df}, 5% cutoff ${crit}). `+(chi<=crit?'The result fits the expected ratio. Small samples vary, so try more offspring.':'This is further from the expected ratio than chance usually allows.')
+    :(N&&df==0?'Every offspring has the same phenotype, so there is no ratio to test.':'Breed offspring to compare against the expected ratio.');
+}
+$('go').onclick=()=>{
+  const n=Math.max(1,Math.min(100000,parseInt($('n').value)||1)),g1=gametes(parent('a')),g2=gametes(parent('b'));
+  const c={};phenoKeys().forEach(k=>c[k]=0);
+  for(let i=0;i<n;i++){
+    const a=g1[Math.random()*g1.length|0],b=g2[Math.random()*g2.length|0];
+    c[pheno(combine(a,b))]++;
+  }
+  obs={n,c};render();
+};
+$('clear').onclick=()=>{obs=null;render()};
+$('di').onchange=()=>{obs=null;render()};
+render();
+</script>
+</body>
+</html>
